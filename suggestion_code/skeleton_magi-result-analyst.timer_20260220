@@ -1,0 +1,24 @@
+# skeleton: magi-result-analyst.timer
+# /home/limonene/ROCm-project/MAGI-agents/deploy/magi-result-analyst.timer
+#
+# 注意: これはスケルトンコードです。
+# Codexは以下のコマンドで配置・有効化してください:
+#   sudo cp deploy/magi-result-analyst.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now magi-result-analyst.timer
+#   systemctl list-timers | grep magi-result-analyst
+#
+# 実行スケジュール: 1日4回（2:10 / 8:10 / 14:10 / 20:10）
+#   - 毎時0分を避けてずらすことでシステム全体の負荷集中を回避
+#   - RandomizedDelaySec=120 で±2分のランダムジッターを付加
+
+[Unit]
+Description=Schedule MAGI result analyst
+
+[Timer]
+OnCalendar=*-*-* 02,08,14,20:10:00
+Persistent=true          # サーバ再起動後も取りこぼしにくい
+RandomizedDelaySec=120   # ±2分のジッター（API集中アクセス回避）
+
+[Install]
+WantedBy=timers.target

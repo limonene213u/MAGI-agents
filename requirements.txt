@@ -1,0 +1,11 @@
+# /home/limonene/ROCm-project/MAGI-agents/requirements.txt
+#
+# セットアップ:
+#   python3 -m venv .venv
+#   . .venv/bin/activate
+#   pip install -r requirements.txt
+
+requests>=2.31.0       # HTTP通信（タイムアウト明示必須）
+python-dotenv>=1.0.0   # .env読み込み
+pyyaml>=6.0            # config.yaml読み込み
+pydantic>=2.0          # LLMレスポンスのバリデーション（V2・Rust実装で高速）

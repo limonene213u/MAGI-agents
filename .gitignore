@@ -1,0 +1,12 @@
+AGENTS.md
+AGENT_TASK.md
+ISSUES.md
+.env
+.venv
+AGENT_LOGS
+Peer_review_logs
+node_modules
+CLI_Err_Logs
+MAGI-agents_*.md
+MAGI-agents_*.MD
+audit_logs

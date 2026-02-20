@@ -1,0 +1,26 @@
+# /home/limonene/ROCm-project/MAGI-agents/deploy/magi-result-analyst.service
+#
+# 配置手順:
+#   sudo cp deploy/magi-result-analyst.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#
+# 注意: EnvironmentFile は使わない（load_dotenv()に一任）
+#   理由: .envのクォート付き値をsystemdが誤読みする仕様がある
+#   → APIキーはPython側のload_dotenv()に一任（WorkingDirectoryが正しければOK）
+
+[Unit]
+Description=MAGI result analyst (OpenRouter) - batch analyze runs
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/limonene/ROCm-project/MAGI-agents
+ExecStart=/home/limonene/ROCm-project/MAGI-agents/.venv/bin/python /home/limonene/ROCm-project/MAGI-agents/result_analyst.py
+
+# 安全装置
+TimeoutStartSec=1800   # 30分でタイムアウト（LLM応答が詰まっても止まる）
+Nice=10                # EPYCの優先度を下げる（Control Plane負荷対策）
+
+[Install]
+WantedBy=multi-user.target

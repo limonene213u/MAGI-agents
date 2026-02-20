@@ -1,0 +1,81 @@
+# /home/limonene/ROCm-project/MAGI-agents/config.yaml
+# MAGI-agents global configuration
+# すべてのagent設定はここに集約する
+#
+# モデル変更はここだけ触ればOK。コードに触らない。
+#
+# 【モデルID・無料枠の条件】
+# モデル選定根拠: server_docs/OpenRouter_Model_Select_Guide_20260220.md
+# :free サフィックスの要否・レート制限は以下を正とする:
+#   tank/docs-ref/Coding_ref/OpenRouter_Docs-API_Reference/
+#
+# 【フォールバック戦略】
+# models: [...] リストで優先順位を定義
+# 並び順: 無料モデル優先 → 最終フォールバックのみ超低価格有料
+# OpenRouterが先頭モデルのプロバイダがダウン・レート制限時に自動で次へフォールバック
+#
+# 変更履歴:
+#   20260220 v1: スケルトン v3 をベースに本番実装
+#     - model(単一) → models(リスト) に変更
+#     - フォールバックモデルを追加
+
+agents:
+
+  reviewer:
+    models:
+      - "google/gemini-2.0-flash-001:free"   # 第1候補: 無料・高速
+      - "deepseek/deepseek-r1-0528:free"     # 第2候補: 無料・推論特化
+      - "meta-llama/llama-3.3-70b-instruct:free"  # 第3候補: 無料・汎用
+    mode: "manual"          # manual | timer
+    is_paid: false
+    temperature: 0.2
+    top_p: 0.9
+    max_output_tokens: 2048
+    guardrails:
+      max_items_per_run: 20
+      max_tokens_per_item: 8000
+
+  result_analyst:
+    models:
+      - "google/gemini-2.0-flash-001:free"   # 第1候補: 無料・高速・JSON mode対応
+      - "deepseek/deepseek-r1-0528:free"     # 第2候補: 無料
+      - "meta-llama/llama-3.3-70b-instruct:free"  # 第3候補: 無料
+    mode: "timer"
+    is_paid: false
+    temperature: 0.2
+    top_p: 0.9
+    max_output_tokens: 2048
+    guardrails:
+      max_items_per_run: 20
+      max_tokens_per_item: 8000
+
+  doc_writer:
+    models:
+      - "google/gemini-2.0-flash-001:free"   # 第1候補: 無料
+      - "meta-llama/llama-3.3-70b-instruct:free"  # 第2候補: 無料
+    mode: "manual"
+    is_paid: false
+    temperature: 0.2
+    top_p: 0.9
+    max_output_tokens: 2048
+    guardrails:
+      max_items_per_run: 10
+      max_tokens_per_item: 6000
+
+  experimenter:
+    models:
+      - "anthropic/claude-sonnet-4-5"        # 第1候補: 有料・高精度
+      - "deepseek/deepseek-chat"             # フォールバック: 超低価格有料
+    mode: "manual"
+    is_paid: true
+    temperature: 0.2
+    top_p: 0.9
+    max_output_tokens: 4096
+    guardrails:
+      max_items_per_run: 5
+      max_tokens_per_item: 8000
+      credit_threshold_usd: 5.0   # 残高がこれ未満なら停止
+
+# -----------------------------------------------
+# 将来エージェントを追加するときはここに追記する
+# -----------------------------------------------
