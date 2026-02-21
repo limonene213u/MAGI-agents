@@ -19,8 +19,10 @@ WorkingDirectory=/home/limonene/ROCm-project/MAGI-agents
 ExecStart=/home/limonene/ROCm-project/MAGI-agents/.venv/bin/python /home/limonene/ROCm-project/MAGI-agents/result_analyst.py
 
 # 安全装置
-TimeoutStartSec=1800   # 30分でタイムアウト（LLM応答が詰まっても止まる）
-Nice=10                # EPYCの優先度を下げる（Control Plane負荷対策）
+# 30分でタイムアウト（LLM応答が詰まっても止まる）
+TimeoutStartSec=1800
+# EPYCの優先度を下げる（Control Plane負荷対策）
+Nice=10
 
 [Install]
 WantedBy=multi-user.target

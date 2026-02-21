@@ -15,8 +15,10 @@ Description=Schedule MAGI result analyst
 
 [Timer]
 OnCalendar=*-*-* 02,08,14,20:10:00
-Persistent=true          # サーバ再起動後も取りこぼしにくい
-RandomizedDelaySec=120   # ±2分のジッター（API集中アクセス回避）
+# サーバ再起動後も取りこぼしにくい
+Persistent=true
+# ±2分のジッター（API集中アクセス回避）
+RandomizedDelaySec=120
 
 [Install]
 WantedBy=timers.target

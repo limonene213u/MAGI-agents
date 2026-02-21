@@ -23,9 +23,9 @@ agents:
 
   reviewer:
     models:
-      - "google/gemini-2.0-flash-001:free"   # 第1候補: 無料・高速
-      - "deepseek/deepseek-r1-0528:free"     # 第2候補: 無料・推論特化
-      - "meta-llama/llama-3.3-70b-instruct:free"  # 第3候補: 無料・汎用
+      - "deepseek/deepseek-r1-0528:free"          # 第1候補: 無料・推論特化
+      - "meta-llama/llama-3.3-70b-instruct:free"  # 第2候補: 無料・汎用
+      - "google/gemini-2.0-flash-001"              # 第3候補: 超低価格($0.0000001/token)
     mode: "manual"          # manual | timer
     is_paid: false
     temperature: 0.2
@@ -37,9 +37,9 @@ agents:
 
   result_analyst:
     models:
-      - "google/gemini-2.0-flash-001:free"   # 第1候補: 無料・高速・JSON mode対応
-      - "deepseek/deepseek-r1-0528:free"     # 第2候補: 無料
-      - "meta-llama/llama-3.3-70b-instruct:free"  # 第3候補: 無料
+      - "deepseek/deepseek-r1-0528:free"          # 第1候補: 無料
+      - "meta-llama/llama-3.3-70b-instruct:free"  # 第2候補: 無料
+      - "google/gemini-2.0-flash-001"              # 第3候補: 超低価格・JSON mode対応
     mode: "timer"
     is_paid: false
     temperature: 0.2
@@ -51,8 +51,9 @@ agents:
 
   doc_writer:
     models:
-      - "google/gemini-2.0-flash-001:free"   # 第1候補: 無料
+      - "deepseek/deepseek-r1-0528:free"          # 第1候補: 無料
       - "meta-llama/llama-3.3-70b-instruct:free"  # 第2候補: 無料
+      - "google/gemini-2.0-flash-001"              # 第3候補: 超低価格
     mode: "manual"
     is_paid: false
     temperature: 0.2
