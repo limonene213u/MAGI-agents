@@ -179,14 +179,30 @@ class ResultAnalystAgent(MAGIAgentBase):
                     extra[name] = p.read_text(encoding="utf-8", errors="replace")[:2000]
 
         run_id = result.get("run_id") or run_dir.name
+
+        # lab_notebook の既存実験ログを参照コンテキストとして追加
+        lab_context = ""
+        lab_log = self.paths.tank_root / "lab_notebook" / "experiment_log.md"
+        if lab_log.exists():
+            try:
+                lab_text = lab_log.read_text(encoding="utf-8", errors="replace")
+                # トークン節約: 最大3000文字に制限
+                lab_context = lab_text[:3000]
+            except Exception:
+                pass
+
         prompt = {
             "run_dir": str(run_dir),
             "run_id": run_id,
             "result_json": result,
             "extra": extra,
         }
+        if lab_context:
+            prompt["lab_notebook_context"] = lab_context
+
         return (
-            "Analyze the following run artifacts and return JSON only.\n\n"
+            "Analyze the following run artifacts and return JSON only.\n"
+            "If lab_notebook_context is provided, use it to compare with previous runs.\n\n"
             "INPUT(JSON):\n"
             + json.dumps(prompt, ensure_ascii=False, indent=2)
         )
