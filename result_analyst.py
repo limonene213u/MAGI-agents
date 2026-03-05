@@ -127,10 +127,73 @@ def _pct(rate: float) -> str:
     return f"{rate * 100:.1f}%"
 
 
+def _load_sidecar_json(run_dir: Path, name: str) -> Dict[str, Any]:
+    path = run_dir / name
+    if not path.exists():
+        return {}
+    try:
+        return load_json(path)
+    except Exception:
+        return {}
+
+
+def _resolve_spec_env_metrics(run_dir: Path, result: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    """
+    Rust版 result.json (magi-result-v0) は spec/env を内包しないため sidecar を参照。
+    旧フォーマット（result内 spec/env/metrics）も後方互換で維持する。
+    """
+    spec = result.get("spec", {})
+    env = result.get("env", {})
+    metrics = result.get("metrics", {})
+
+    if not isinstance(spec, dict) or not spec:
+        spec_doc = _load_sidecar_json(run_dir, "spec.json")
+        if isinstance(spec_doc, dict):
+            spec = spec_doc.get("spec", spec_doc)
+            if not isinstance(spec, dict):
+                spec = {}
+
+    if not isinstance(env, dict) or not env:
+        env_doc = _load_sidecar_json(run_dir, "env.json")
+        env = env_doc if isinstance(env_doc, dict) else {}
+
+    if not isinstance(metrics, dict) or not metrics:
+        summary = result.get("summary", {})
+        if isinstance(summary, dict):
+            summary_metrics = summary.get("metrics", {})
+            if isinstance(summary_metrics, dict):
+                metrics = summary_metrics
+
+    if not isinstance(metrics, dict):
+        metrics = {}
+
+    return spec, env, metrics
+
+
+def _json_rate_from_metrics(metrics: Dict[str, Any]) -> str:
+    if "json_parse_rate" in metrics:
+        return _pct(metrics["json_parse_rate"])
+    responses_count = metrics.get("responses_count")
+    responses_invalid = metrics.get("responses_invalid_lines")
+    if isinstance(responses_count, int) and isinstance(responses_invalid, int) and responses_count > 0:
+        return _pct((responses_count - responses_invalid) / responses_count)
+    return "—"
+
+
+def _status_icon(status_val: str, failed: int) -> str:
+    s = (status_val or "").strip().lower()
+    if s in {"success", "ok"}:
+        return "✅"
+    if s in {"failure", "failed", "failed_with_evidence", "incomplete"}:
+        return "❌"
+    return "✅" if failed == 0 else "❌"
+
+
 def generate_bundle_md(
     result: Dict[str, Any],
     report: Optional[ReportJSON],
     run_id: str,
+    run_dir: Optional[Path] = None,
 ) -> str:
     """
     result.json + report.json から人間可読な NotebookLM bundle Markdown を生成。
@@ -140,7 +203,12 @@ def generate_bundle_md(
     lines: List[str] = [f"# 実験 Run Bundle: {run_id}", ""]
 
     # --- 実験設定 ---
-    spec = result.get("spec", {})
+    if run_dir is not None:
+        spec, env, metrics = _resolve_spec_env_metrics(run_dir, result)
+    else:
+        spec = result.get("spec", {}) if isinstance(result.get("spec", {}), dict) else {}
+        env = result.get("env", {}) if isinstance(result.get("env", {}), dict) else {}
+        metrics = result.get("metrics", {}) if isinstance(result.get("metrics", {}), dict) else {}
     lines += [
         "## 実験設定",
         "",
@@ -153,7 +221,6 @@ def generate_bundle_md(
     ]
 
     # --- 実行環境（新旧フォーマット両対応）---
-    env = result.get("env", {})
     os_info = env.get("os", {})
     gpu_info = env.get("gpu", {})
     driver = env.get("driver", {})
@@ -198,12 +265,11 @@ def generate_bundle_md(
     lines.append("")
 
     # --- 結果サマリ ---
-    metrics = result.get("metrics", {})
     total = metrics.get("total", 0)
     passed = metrics.get("passed", 0)
     failed = metrics.get("failed", 0)
     status_val = result.get("status", "")
-    status_icon = "✅" if status_val == "success" or failed == 0 else "❌"
+    status_icon = _status_icon(str(status_val), failed if isinstance(failed, int) else 0)
 
     lines += [
         "## 結果サマリ",
@@ -214,8 +280,9 @@ def generate_bundle_md(
         f"| 合計タスク | {total} |",
         f"| passed | {passed} / {total} ({_pct(passed / total) if total else '—'}) |",
     ]
-    if "json_parse_rate" in metrics:
-        lines.append(f"| JSON解析成功率 | {_pct(metrics['json_parse_rate'])} |")
+    json_rate = _json_rate_from_metrics(metrics)
+    if json_rate != "—":
+        lines.append(f"| JSON解析成功率 | {json_rate} |")
     if "constraint_pass_rate" in metrics:
         lines.append(f"| 制約充足率 | {_pct(metrics['constraint_pass_rate'])} |")
     lines.append("")
@@ -327,21 +394,20 @@ def generate_runs_master_table_md(all_dirs: List[Path]) -> str:
             lines.append(f"| {date_str} | {run_id} | — | — | — | — | — | — | — | — |")
             continue
 
-        spec = result.get("spec", {})
-        env = result.get("env", {})
+        spec, env, metrics = _resolve_spec_env_metrics(run_dir, result)
 
         # ノード: spec.compute_node があればそちら優先、なければ env.hostname
-        node = spec.get("compute_node") or env.get("hostname", "—")
+        runner = env.get("runner", {}) if isinstance(env.get("runner", {}), dict) else {}
+        node = spec.get("compute_node") or runner.get("hostname") or env.get("hostname", "—")
 
         model = spec.get("model_id", "—")
         dataset = spec.get("dataset", "—")
         quant = spec.get("quantization", "—")
 
-        metrics = result.get("metrics", {})
         total = metrics.get("total", "—")
         passed = metrics.get("passed", "—")
         passed_str = f"{passed}/{total}" if isinstance(passed, int) and isinstance(total, int) else "—"
-        json_rate = _pct(metrics["json_parse_rate"]) if "json_parse_rate" in metrics else "—"
+        json_rate = _json_rate_from_metrics(metrics)
         cp_rate = _pct(metrics["constraint_pass_rate"]) if "constraint_pass_rate" in metrics else "—"
 
         lines.append(
@@ -430,8 +496,8 @@ def generate_raw_data_master_table_md(all_dirs: List[Path]) -> str:
             lines.append(f"| {date_str} | {run_id} | — | — | — | — | — |")
             continue
 
-        metrics = result.get("metrics", {})
-        json_rate = _pct(metrics["json_parse_rate"]) if "json_parse_rate" in metrics else "—"
+        _spec, _env, metrics = _resolve_spec_env_metrics(run_dir, result)
+        json_rate = _json_rate_from_metrics(metrics)
         cp_rate = _pct(metrics["constraint_pass_rate"]) if "constraint_pass_rate" in metrics else "—"
         details = metrics.get("details", [])
 
@@ -722,7 +788,7 @@ class ResultAnalystAgent(MAGIAgentBase):
             run_id = run_dir.name
             report_obj = self._load_report(run_dir)
 
-            bundle_md = generate_bundle_md(result, report_obj, run_id)
+            bundle_md = generate_bundle_md(result, report_obj, run_id, run_dir=run_dir)
             safe_write_text(self._bundle_path(run_dir), bundle_md)
             self.log_event("info", f"wrote bundle: {run_id}")
             bundled += 1
