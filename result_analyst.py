@@ -3,8 +3,7 @@ MAGI-agents result_analyst.py — 実験結果整理エージェント
 
 設計方針:
   - AGENTS.md の result_analyst I/O契約に準拠
-  - 入力:  tank/artifacts/runs/*/result.json
-           tank/artifacts/*/result.json（直下も対象、20990101-* 除外）
+  - 入力:  tank/artifacts/runs/*/result.json（canonical のみ）
   - 出力:  tank/lab_notebook/reports/{run_id}/report.json（Pydantic V2でバリデーション）
            tank/lab_notebook/reports/{run_id}/report.md（report.jsonから自動生成）
            tank/lab_notebook/notes/NotebookLM/{run_id}/notebooklm_bundle-{run_id}.md
@@ -12,7 +11,6 @@ MAGI-agents result_analyst.py — 実験結果整理エージェント
            tank/lab_notebook/notes/NotebookLM/reports_master_table.md（全レポート一覧テーブル）
            tank/lab_notebook/notes/NotebookLM/raw_data_master_table.md（全run×タスク生データテーブル）
   - artifacts/ には一切書き込まない（runner の領域、不変）
-  - 後方互換: artifacts/ 内の旧 report.json/md は読み取りのみ許可（再分析スキップ）
   - idempotent: run_id方式（sha256_text(run_dir + result.json内容)[:16]）
   - ask(json_mode=True) でJSON mode指定 → ReportJSON.model_validate_json() で検証
   - バリデーション失敗時: parse errorをreport.mdに保存して続行（全体を止めない）
@@ -22,10 +20,9 @@ MAGI-agents result_analyst.py — 実験結果整理エージェント
   - --dry-run: ファイル書き出しなしで処理対象を表示
   - raw_data_master_table.md: 全run×全タスクの生データ（details）を展開した行構造テーブル
 
-スキャン優先順位:
-  1. artifacts/runs/ を先にスキャン（既存 idempotent キーを保持）
-  2. artifacts/ 直下を追加スキャン（runs/ に無いもののみ追加）
-  20990101-* はテストダミー、常にスキップ
+スキャン方針:
+  1. artifacts/runs/ のみをスキャン
+  2. 20990101-* はテストダミーとして常にスキップ
 
 failure_phase分類:
   Research_Governance.md §4.3 Failure Taxonomy に準拠
@@ -40,7 +37,7 @@ failure_phase分類:
 
 変更履歴:
   20260220 v1: スケルトン v2 をベースに本番実装
-  20260301 v2: artifacts/ 直下もスキャン対象に追加、NotebookLM bundle 生成を追加
+  20260301 v2: NotebookLM bundle 生成を追加
   20260301 v3: runs_master_table / reports_master_table 自動生成を追加
   20260301 v4: raw_data_master_table 追加（details を run×task 行に展開、LLM不要）
 """
@@ -595,30 +592,25 @@ class ResultAnalystAgent(MAGIAgentBase):
 
     def _find_run_dirs(self) -> List[Path]:
         """
-        artifacts/runs/ と artifacts/ 直下を両方スキャン。
-        - artifacts/runs/ を優先（既存 idempotent キーを保持）
+        artifacts/runs/ のみスキャン。
         - 20990101-* はテストダミー、スキップ
         - result.json が存在するディレクトリのみ対象
         """
-        seen: set = set()
         candidates: List[Path] = []
 
-        for base in [self._runs_root(), self._artifacts_root()]:
-            if not base.exists():
+        base = self._runs_root()
+        if not base.exists():
+            return candidates
+        for d in sorted(base.iterdir()):
+            if not d.is_dir():
                 continue
-            for d in sorted(base.iterdir()):
-                if not d.is_dir():
-                    continue
-                if not _RUN_ID_RE.match(d.name):
-                    continue
-                if d.name.startswith(_TEST_PREFIX):
-                    continue
-                if d.name in seen:
-                    continue
-                if not (d / "result.json").exists():
-                    continue
-                seen.add(d.name)
-                candidates.append(d)
+            if not _RUN_ID_RE.match(d.name):
+                continue
+            if d.name.startswith(_TEST_PREFIX):
+                continue
+            if not (d / "result.json").exists():
+                continue
+            candidates.append(d)
 
         return candidates
 
@@ -626,26 +618,18 @@ class ResultAnalystAgent(MAGIAgentBase):
 
     def _report_exists(self, run_dir: Path) -> bool:
         """
-        新しい正規の場所（lab_notebook/reports/）を優先チェック。
-        後方互換として旧 artifacts/ 内も確認（再分析を防ぐため）。
+        正規の場所（lab_notebook/reports/）のみチェック。
         """
         run_id = run_dir.name
         new_dir = self._report_dir(run_id)
-        if (new_dir / "report.md").exists() and (new_dir / "report.json").exists():
-            return True
-        # 後方互換: 旧 artifacts/ 内の report（読み取り専用扱い）
-        return (run_dir / "report.md").exists() and (run_dir / "report.json").exists()
+        return (new_dir / "report.md").exists() and (new_dir / "report.json").exists()
 
     def _load_report(self, run_dir: Path) -> Optional[ReportJSON]:
         """
-        report.json を新旧どちらの場所からでも読み込む。
-        新しい場所（lab_notebook/reports/）を優先する。
+        report.json を正規の場所（lab_notebook/reports/）から読み込む。
         """
         run_id = run_dir.name
-        candidates = [
-            self._report_dir(run_id) / "report.json",
-            run_dir / "report.json",  # 旧 artifacts/ 内（後方互換）
-        ]
+        candidates = [self._report_dir(run_id) / "report.json"]
         for rp in candidates:
             if rp.exists():
                 try:
